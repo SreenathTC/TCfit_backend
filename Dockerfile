@@ -20,5 +20,5 @@ EXPOSE 5000
 # Start the app
 #CMD ["python", "app.py"]
 # Run using Gunicorn with 300s timeout and 2 worker processes
-#CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "app:app"]
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "-k", "uvicorn.workers.UvicornWorker", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "app:app"]
+#CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "-k", "uvicorn.workers.UvicornWorker", "app:app"]
