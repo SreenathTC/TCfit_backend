@@ -1,10 +1,13 @@
 import os
 import logging
-from flask import Flask, request, jsonify
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, From, To, Subject, PlainTextContent
+import asyncio
 from datetime import datetime
 import re
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, From, To, Subject, PlainTextContent
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -14,8 +17,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Initialize FastAPI app
+app = FastAPI()
 
 # SendGrid configuration
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
@@ -33,17 +36,20 @@ def validate_email(email):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
-@app.route('/health', methods=['GET'])
-def health_check():
+@app.get('/health')
+async def health_check():
     """Health check endpoint"""
-    return jsonify({
-        "status": "running",
-        "sendgrid_configured": sg is not None,
-        "timestamp": datetime.utcnow().isoformat()
-    }), 200
+    return JSONResponse(
+        content={
+            "status": "running",
+            "sendgrid_configured": sg is not None,
+            "timestamp": datetime.utcnow().isoformat()
+        },
+        status_code=200
+    )
 
-@app.route('/send-email', methods=['POST'])
-def send_email():
+@app.post('/send-email')
+async def send_email(request: Request):
     """
     Send email endpoint
     Expected JSON payload:
@@ -56,18 +62,24 @@ def send_email():
     try:
         # Check if SendGrid is configured
         if sg is None:
-            return jsonify({
-                "success": False,
-                "message": "SendGrid not configured. Please check SENDGRID_API_KEY environment variable."
-            }), 500
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "SendGrid not configured. Please check SENDGRID_API_KEY environment variable."
+                },
+                status_code=500
+            )
         
-        data = request.get_json()
+        data = await request.json()
         
         if not data:
-            return jsonify({
-                "success": False,
-                "message": "No JSON data provided"
-            }), 400
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "No JSON data provided"
+                },
+                status_code=400
+            )
         
         # Get required fields
         from_email = data.get('from_email', '').strip()
@@ -76,37 +88,52 @@ def send_email():
         
         # Validate required fields
         if not from_email:
-            return jsonify({
-                "success": False,
-                "message": "from_email is required"
-            }), 400
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "from_email is required"
+                },
+                status_code=400
+            )
             
         if not to_email:
-            return jsonify({
-                "success": False,
-                "message": "to_email is required"
-            }), 400
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "to_email is required"
+                },
+                status_code=400
+            )
             
         if not content:
-            return jsonify({
-                "success": False,
-                "message": "content is required"
-            }), 400
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "content is required"
+                },
+                status_code=400
+            )
         
         # Validate email formats
         if not validate_email(from_email):
-            return jsonify({
-                "success": False,
-                "message": "Invalid from_email format"
-            }), 400
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Invalid from_email format"
+                },
+                status_code=400
+            )
         
         if not validate_email(to_email):
-            return jsonify({
-                "success": False,
-                "message": "Invalid to_email format"
-            }), 400
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Invalid to_email format"
+                },
+                status_code=400
+            )
         
-        # Create and send email
+        # Create and send email asynchronously
         from_addr = From(from_email)
         to_addr = To(to_email)
         subject_obj = Subject("Shared Content")  # Simple default subject
@@ -114,42 +141,55 @@ def send_email():
         
         mail = Mail(from_addr, to_addr, subject_obj, content_obj)
         
-        # Send email
-        response = sg.send(mail)
+        # Send email asynchronously using thread pool
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, sg.send, mail)
         
         logger.info(f"Email sent successfully from {from_email} to {to_email}")
         
-        return jsonify({
-            "success": True,
-            "message": "Email sent successfully",
-            "data": {
-                "from_email": from_email,
-                "to_email": to_email,
-                "status_code": response.status_code,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        }), 200
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Email sent successfully",
+                "data": {
+                    "from_email": from_email,
+                    "to_email": to_email,
+                    "status_code": response.status_code,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            },
+            status_code=200
+        )
         
     except Exception as e:
         logger.error(f"Error sending email: {str(e)}")
-        return jsonify({
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": f"Failed to send email: {str(e)}"
+            },
+            status_code=500
+        )
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
+    return JSONResponse(
+        content={
             "success": False,
-            "message": f"Failed to send email: {str(e)}"
-        }), 500
+            "message": "Endpoint not found"
+        },
+        status_code=404
+    )
 
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({
-        "success": False,
-        "message": "Endpoint not found"
-    }), 404
-
-@app.errorhandler(405)
-def method_not_allowed(error):
-    return jsonify({
-        "success": False,
-        "message": "Method not allowed"
-    }), 405
+@app.exception_handler(405)
+async def method_not_allowed_handler(request: Request, exc):
+    return JSONResponse(
+        content={
+            "success": False,
+            "message": "Method not allowed"
+        },
+        status_code=405
+    )
 
 if __name__ == '__main__':
     # Check if SendGrid API key is configured
@@ -160,8 +200,9 @@ if __name__ == '__main__':
         print("="*50 + "\n")
     
     # Get port from environment or use default
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     
-    # Run the Flask app
-    app.run(debug=debug, host='0.0.0.0', port=port)
+    # Run with uvicorn
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=debug)
