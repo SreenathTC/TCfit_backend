@@ -6,6 +6,7 @@ import re
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware  # CORS import
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, From, To, Subject, PlainTextContent
 from dotenv import load_dotenv
@@ -19,6 +20,28 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI()
+
+# Production-ready CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:4200",           # Angular dev server
+        "https://localhost:4200",          # HTTPS Angular dev
+        "https://app.thethinkfit.in",      # Your production domain
+        "https://thethinkfit.in",          # Main domain (if needed)
+        "https://www.thethinkfit.in",      # WWW version (if needed)
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],  # Only methods you need
+    allow_headers=[
+        "Accept",
+        "Accept-Language", 
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With"
+    ],
+)
 
 # SendGrid configuration
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
