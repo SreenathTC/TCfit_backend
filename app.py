@@ -367,7 +367,7 @@ if __name__ == '__main__':
         print("="*50 + "\n")
     
     # Get port from environment or use default
-    port = int(os.environ.get('PORT', 8000))
+    port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     
     # Run with uvicorn
