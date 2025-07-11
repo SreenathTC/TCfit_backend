@@ -8,7 +8,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware  # CORS import
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, From, To, Subject, HtmlContent  # ✅ Changed to HtmlContent
+from sendgrid.helpers.mail import Mail, From, To, Subject, HtmlContent
+from sendgrid.helpers.mail import TrackingSettings, ClickTracking, OpenTracking  # Add tracking imports  #Changed to HtmlContent
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -66,15 +67,15 @@ def create_email_with_button(content, button_link=None):
     def get_smart_button_text(url):
         """Get contextual button text based on URL"""
         if 'thethinkfit.in/invite' in url:
-            return '🚀 Join ThinkFit'
+            return 'Join ThinkFit'
         elif 'thethinkfit.in' in url:
-            return '🏃‍♂️ Open ThinkFit'
+            return 'Open ThinkFit'
         elif 'document' in url or 'doc' in url:
-            return '📄 View Document'
+            return 'View Document'
         elif 'share' in url or 'shared' in url:
-            return '📋 View Shared Content'
+            return 'View Shared Content'
         else:
-            return '🔗 Open Link'
+            return 'Open Link'
     
     # Convert line breaks to HTML
     html_content = content.replace('\n', '<br>')
@@ -183,7 +184,7 @@ def create_email_with_button(content, button_link=None):
                 <p style="margin: 0;">Best regards,</p>
                 <p style="margin: 5px 0 0 0; font-weight: 600; color: #4CAF50;">The ThinkFit Team</p>
                 <p style="margin: 15px 0 0 0; font-size: 12px; color: #aaa;">
-                    Start your fitness journey today! 💪
+                    Start your fitness journey today!
                 </p>
             </div>
         </div>
@@ -296,16 +297,24 @@ async def send_email(request: Request):
                 status_code=400
             )
         
-        # ✅ Create HTML email with optional button
+        #Create HTML email with optional button
         html_content = create_email_with_button(content, button_link)
         
         # Create and send email asynchronously
         from_addr = From(from_email)
         to_addr = To(to_email)
         subject_obj = Subject("Shared Content")
-        content_obj = HtmlContent(html_content)  # ✅ HTML email with optional button
+        content_obj = HtmlContent(html_content)  #HTML email with optional button
         
         mail = Mail(from_addr, to_addr, subject_obj, content_obj)
+        
+        # Explicitly disable click tracking to preserve original URLs
+        tracking_settings = TrackingSettings()
+        click_tracking = ClickTracking(enable=False, enable_text=False)
+        open_tracking = OpenTracking(enable=False)
+        tracking_settings.click_tracking = click_tracking
+        tracking_settings.open_tracking = open_tracking
+        mail.tracking_settings = tracking_settings
         
         # Send email asynchronously using thread pool
         loop = asyncio.get_event_loop()
